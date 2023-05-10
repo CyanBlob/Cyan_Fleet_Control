@@ -68,7 +68,6 @@ impl TemplateApp {
 
         let mut state = TemplateApp::default();
         state.conf.bearer_access_token = Some(env::var("SPACETRADERS_TOKEN").expect("SPACETRADERS_TOKEN environment variable must be set"));
-        //state.conf.bearer_access_token = Some("***REMOVED***".to_owned());
         state
     }
 }
