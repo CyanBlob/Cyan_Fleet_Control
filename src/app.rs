@@ -1,13 +1,41 @@
+pub mod api;
+
+use std::env;
+
+use pollster::FutureExt as _;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener; // provides Future.block_on()
+
+use spacedust::apis::agents_api::*;
+use spacedust::apis::contracts_api::*;
+use spacedust::apis::fleet_api::*;
+use spacedust::apis::systems_api::*;
+
+use spacedust::apis::configuration::Configuration;
+use spacedust::apis::default_api::register;
+use spacedust::models::register_request::{Faction, RegisterRequest};
+
+use spacedust::models::*;
+
+use self::api::spacetraders::{Render, SpaceTraders};
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
     // Example stuff:
     label: String,
+    test: SpaceTraders,
 
     // this how you opt-out of serialization of a member
     #[serde(skip)]
     value: f32,
+    #[serde(skip)]
+    conf: Configuration,
+    contracts: Vec<Contract>,
+    ships: Vec<Ship>,
+    waypoints: Vec<Waypoint>,
+    log: Vec<String>,
 }
 
 impl Default for TemplateApp {
@@ -15,7 +43,13 @@ impl Default for TemplateApp {
         Self {
             // Example stuff:
             label: "Hello World!".to_owned(),
+            test: SpaceTraders {},
             value: 2.7,
+            conf: Configuration::new(),
+            contracts: vec![],
+            ships: vec![],
+            waypoints: vec![],
+            log: vec![],
         }
     }
 }
@@ -28,11 +62,14 @@ impl TemplateApp {
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
+        //if let Some(storage) = cc.storage {
+        //return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        //}
 
-        Default::default()
+        let mut state = TemplateApp::default();
+        state.conf.bearer_access_token = Some(env::var("SPACETRADERS_TOKEN").expect("SPACETRADERS_TOKEN environment variable must be set"));
+        //state.conf.bearer_access_token = Some("***REMOVED***".to_owned());
+        state
     }
 }
 
@@ -45,8 +82,6 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { label, value } = self;
-
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
         // Tip: a good default choice is to just keep the `CentralPanel`.
@@ -64,53 +99,141 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Cyan Fleet Control");
 
             ui.horizontal(|ui| {
                 ui.label("Write something: ");
-                ui.text_edit_singleline(label);
+                ui.text_edit_singleline(&mut self.label);
             });
 
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
+            ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
             if ui.button("Increment").clicked() {
-                *value += 1.0;
+                *&mut self.value += 1.0;
             }
 
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to(
-                        "eframe",
-                        "https://github.com/emilk/egui/tree/master/crates/eframe",
-                    );
-                    ui.label(".");
-                });
+            if ui.button("Get info").clicked() {
+                match get_my_agent(&self.conf).block_on() {
+                    Ok(res) => {
+                        println!("{:#?}", res);
+                        match get_waypoint(
+                            &self.conf,
+                            res.data.headquarters.rsplit_once("-").unwrap().0,
+                            &res.data.headquarters,
+                        )
+                        .block_on()
+                        {
+                            Ok(w) => self.log.push(format!("{:?}", w)),
+                            Err(_) => self.log.push("Failed to get waypoint info".to_owned()),
+                        }
+                    }
+                    Err(err_res) => {
+                        panic!("{:#?}", err_res);
+                    }
+                }
+                println!("\n");
+            }
+
+            egui::Window::new("Contracts").show(ctx, |ui| {
+                if self.contracts.len() == 0 {
+                    ui.label("No contracts available or accepted");
+                }
+                for contract in &mut self.contracts {
+                    contract.render(ui, &self.conf);
+                }
+                if ui.button("Fetch").clicked() {
+                    match get_contracts(&self.conf, None, None).block_on() {
+                        Ok(c) => {
+                            self.log.push("Fetching contracts".into());
+                            self.contracts.clear();
+
+                            for contract in c.data {
+                                println!("{:?}", contract);
+                                self.contracts.push(contract);
+                            }
+                        }
+                        Err(_) => self.log.push("Failed to get contracts".to_owned()),
+                    }
+                }
+            });
+
+            egui::Window::new("Fleet").show(ctx, |ui| {
+                if self.ships.len() == 0 {
+                    ui.label("No ships found in fleet");
+                }
+                for ship in &mut self.ships {
+                    ship.render(ui, &self.conf);
+                }
+                if ui.button("Fetch").clicked() {
+                    match get_my_ships(&self.conf, None, None).block_on() {
+                        Ok(f) => {
+                            self.log.push("Fetching fleet".into());
+                            self.ships.clear();
+
+                            for ship in f.data {
+                                println!("{:?}", ship);
+                                self.ships.push(ship);
+                            }
+                        }
+                        Err(_) => self.log.push("Failed to update fleet".to_owned()),
+                    }
+                }
+            });
+
+            egui::Window::new("Waypoints").show(ctx, |ui| {
+                if self.waypoints.len() == 0 {
+                    ui.label("No waypoints found");
+                }
+                for waypoint in &mut self.waypoints {
+                    waypoint.render(ui, &self.conf);
+                }
+                if ui.button("Fetch").clicked() {
+                    if self.ships.len() == 0 {
+                        self.log.push("Cannot fetch waypoints with 0 ships. Fetch ships first".into());
+                    }
+                    let mut visible_systems: Vec<&String>;
+                    visible_systems = self
+                        .ships
+                        .iter()
+                        .map(|ship| &ship.nav.system_symbol)
+                        .collect();
+                    visible_systems.dedup();
+
+                    self.waypoints.clear();
+                    for system in visible_systems {
+                        match get_system_waypoints(&self.conf, &system, None, None).block_on() {
+                            Ok(w) => {
+                                self.log.push(
+                                    format!("Fetched waypoints for system: {}", system).into(),
+                                );
+
+                                for waypoint in w.data {
+                                    self.waypoints.push(waypoint);
+                                }
+                            }
+                            Err(_) => self.log.push(
+                                format!("Failed to fetch waypoints for system: {}", system)
+                                    .to_owned(),
+                            ),
+                        }
+                    }
+                }
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
-        });
-
-        if false {
-            egui::Window::new("Window").show(ctx, |ui| {
-                ui.label("Windows can be moved by dragging them.");
-                ui.label("They are automatically sized based on contents.");
-                ui.label("You can turn on resizing and scrolling if you like.");
-                ui.label("You would normally choose either panels OR windows.");
+        egui::TopBottomPanel::bottom("")
+            .resizable(true)
+            .default_height(200.0)
+            .show(ctx, |ui| {
+                egui::scroll_area::ScrollArea::vertical()
+                    .auto_shrink([false; 2])
+                    .show(ui, |ui| {
+                        ui.code(self.log.join("\n\n")).context_menu(|ui| {
+                            if ui.button("Clear log").clicked() {
+                                self.log.clear()
+                            }
+                        })
+                    });
             });
-        }
     }
 }

@@ -1,0 +1,61 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'cyan_fleet_control'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=cyan_fleet_control"
+                ],
+                "filter": {
+                    "name": "cyan_fleet_control",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'cyan_fleet_control'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=cyan_fleet_control",
+                    "--package=cyan_fleet_control"
+                ],
+                "filter": {
+                    "name": "cyan_fleet_control",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'cyan_fleet_control'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=cyan_fleet_control",
+                    "--package=cyan_fleet_control"
+                ],
+                "filter": {
+                    "name": "cyan_fleet_control",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

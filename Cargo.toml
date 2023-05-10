@@ -1,13 +1,17 @@
 [package]
-name = "eframe_template"
+name = "cyan_fleet_control"
 version = "0.1.0"
-authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
+authors = ["Andrew Thomas <andrewthomas255@duck.com>"]
 edition = "2021"
 rust-version = "1.65"
 
 
 [dependencies]
+spacedust = "1.0.5"
 egui = "0.21.0"
+tokio = { version = "1.28.1", features = ["full"] }
+pollster = "0.3.0"
+
 eframe = { version = "0.21.0", default-features = false, features = [
     "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
