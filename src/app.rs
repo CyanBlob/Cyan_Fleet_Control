@@ -17,12 +17,12 @@ use spacedust::models::register_request::{Faction, RegisterRequest};
 
 use spacedust::models::*;
 
-use self::api::spacetraders::{Render, SpaceTraders};
+use self::api::spacetraders::{Render, SpaceTraders, RenderWithWaypoints, ShipWithNav};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
+pub struct AppState {
     // Example stuff:
     label: String,
     test: SpaceTraders,
@@ -33,12 +33,12 @@ pub struct TemplateApp {
     #[serde(skip)]
     conf: Configuration,
     contracts: Vec<Contract>,
-    ships: Vec<Ship>,
+    ships: Vec<ShipWithNav>,
     waypoints: Vec<Waypoint>,
     log: Vec<String>,
 }
 
-impl Default for TemplateApp {
+impl Default for AppState {
     fn default() -> Self {
         Self {
             // Example stuff:
@@ -54,7 +54,7 @@ impl Default for TemplateApp {
     }
 }
 
-impl TemplateApp {
+impl AppState {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
@@ -66,13 +66,13 @@ impl TemplateApp {
         //return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         //}
 
-        let mut state = TemplateApp::default();
+        let mut state = AppState::default();
         state.conf.bearer_access_token = Some(env::var("SPACETRADERS_TOKEN").expect("SPACETRADERS_TOKEN environment variable must be set"));
         state
     }
 }
 
-impl eframe::App for TemplateApp {
+impl eframe::App for AppState {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
@@ -156,12 +156,12 @@ impl eframe::App for TemplateApp {
                 }
             });
 
-            egui::Window::new("Fleet").show(ctx, |ui| {
+            egui::Window::new("Fleet (simple)").show(ctx, |ui| {
                 if self.ships.len() == 0 {
                     ui.label("No ships found in fleet");
                 }
                 for ship in &mut self.ships {
-                    ship.render(ui, &self.conf);
+                    ship.render_with_waypoints(ui, &self.conf, &self.waypoints);
                 }
                 if ui.button("Fetch").clicked() {
                     match get_my_ships(&self.conf, None, None).block_on() {
@@ -171,7 +171,9 @@ impl eframe::App for TemplateApp {
 
                             for ship in f.data {
                                 println!("{:?}", ship);
-                                self.ships.push(ship);
+                                let destination = ship.nav.waypoint_symbol.clone();
+                                let ship_with_nav = ShipWithNav {ship, destination: destination};
+                                self.ships.push(ship_with_nav);
                             }
                         }
                         Err(_) => self.log.push("Failed to update fleet".to_owned()),
@@ -194,7 +196,7 @@ impl eframe::App for TemplateApp {
                     visible_systems = self
                         .ships
                         .iter()
-                        .map(|ship| &ship.nav.system_symbol)
+                        .map(|ship| &ship.ship.nav.system_symbol)
                         .collect();
                     visible_systems.dedup();
 

@@ -12,7 +12,7 @@ async fn main() -> eframe::Result<()> {
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| Box::new(cyan_fleet_control::TemplateApp::new(cc))),
+        Box::new(|cc| Box::new(cyan_fleet_control::AppState::new(cc))),
     )
 }
 
