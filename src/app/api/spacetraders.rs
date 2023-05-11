@@ -55,7 +55,7 @@ impl RenderWithWaypoints for ShipWithNav {
         ui.vertical(|ui| {
             ui.label(format!("Symbol: {:?}", &self.ship.symbol));
             ui.label(format!("Current fuel: {:?}", &self.ship.fuel.current));
-            ui.label(format!("Fule capacity: {:?}", &self.ship.fuel.capacity));
+            ui.label(format!("Fuel capacity: {:?}", &self.ship.fuel.capacity));
             ui.label(format!("System: {:?}", &self.ship.nav.system_symbol));
             ui.label(format!("Waypoint: {:?}", &self.ship.nav.waypoint_symbol));
 
@@ -106,18 +106,20 @@ impl RenderWithWaypoints for ShipWithNav {
             match &self.ship.nav.status {
                 ShipNavStatus::InTransit => {}
                 _ => {
-                    egui::ComboBox::from_label("Destination")
-                        .selected_text(format!("{:?}", &mut self.destination))
-                        .width(170.0)
-                        .show_ui(ui, |ui| {
-                            for waypoint in waypoints {
-                                ui.selectable_value(
-                                    &mut self.destination,
-                                    waypoint.symbol.clone(),
-                                    format!("{:?}", waypoint.symbol),
-                                );
-                            }
-                        });
+                    ui.push_id(&self.ship.symbol, |ui| {
+                        egui::ComboBox::from_label("Destination")
+                            .selected_text(format!("{:?}", &mut self.destination))
+                            .width(170.0)
+                            .show_ui(ui, |ui| {
+                                for waypoint in waypoints {
+                                    ui.selectable_value(
+                                        &mut self.destination,
+                                        waypoint.symbol.clone(),
+                                        format!("{:?}", waypoint.symbol),
+                                    );
+                                }
+                            });
+                    });
                     if self.destination != self.ship.nav.waypoint_symbol {
                         if ui.button("Begin journey").clicked() {
                             let req = navigate_ship_request::NavigateShipRequest::new(
@@ -141,7 +143,8 @@ impl RenderWithWaypoints for ShipWithNav {
                 ShipNavStatus::Docked => {
                     if self.ship.cargo.capacity > self.ship.cargo.units {
                         if ui.button("Extract").clicked() {
-                            match extract_resources(&conf, &self.ship.symbol, None).block_on() {
+                            let req = extract_resources_request::ExtractResourcesRequest { survey: None };
+                            match extract_resources(&conf, &self.ship.symbol, Some(req)).block_on() {
                                 Ok(r) => println!("{:?}", r),
                                 Err(e) => println!("{:?}", e),
                             }

@@ -17,7 +17,7 @@ use spacedust::models::register_request::{Faction, RegisterRequest};
 
 use spacedust::models::*;
 
-use self::api::spacetraders::{Render, SpaceTraders, RenderWithWaypoints, ShipWithNav};
+use self::api::spacetraders::{Render, RenderWithWaypoints, ShipWithNav, SpaceTraders};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -35,6 +35,8 @@ pub struct AppState {
     contracts: Vec<Contract>,
     ships: Vec<ShipWithNav>,
     waypoints: Vec<Waypoint>,
+    shipyard_waypoint: Option<Waypoint>,
+    shipyard_ships: Option<Vec<ShipyardShip>>,
     log: Vec<String>,
 }
 
@@ -49,6 +51,8 @@ impl Default for AppState {
             contracts: vec![],
             ships: vec![],
             waypoints: vec![],
+            shipyard_waypoint: None,
+            shipyard_ships: None,
             log: vec![],
         }
     }
@@ -67,7 +71,10 @@ impl AppState {
         //}
 
         let mut state = AppState::default();
-        state.conf.bearer_access_token = Some(env::var("SPACETRADERS_TOKEN").expect("SPACETRADERS_TOKEN environment variable must be set"));
+        state.conf.bearer_access_token = Some(
+            env::var("SPACETRADERS_TOKEN")
+                .expect("SPACETRADERS_TOKEN environment variable must be set"),
+        );
         state
     }
 }
@@ -172,7 +179,10 @@ impl eframe::App for AppState {
                             for ship in f.data {
                                 println!("{:?}", ship);
                                 let destination = ship.nav.waypoint_symbol.clone();
-                                let ship_with_nav = ShipWithNav {ship, destination: destination};
+                                let ship_with_nav = ShipWithNav {
+                                    ship,
+                                    destination: destination,
+                                };
                                 self.ships.push(ship_with_nav);
                             }
                         }
@@ -190,7 +200,8 @@ impl eframe::App for AppState {
                 }
                 if ui.button("Fetch").clicked() {
                     if self.ships.len() == 0 {
-                        self.log.push("Cannot fetch waypoints with 0 ships. Fetch ships first".into());
+                        self.log
+                            .push("Cannot fetch waypoints with 0 ships. Fetch ships first".into());
                     }
                     let mut visible_systems: Vec<&String>;
                     visible_systems = self
@@ -217,6 +228,73 @@ impl eframe::App for AppState {
                                     .to_owned(),
                             ),
                         }
+                    }
+                }
+            });
+            egui::Window::new("Shipyard").show(ctx, |ui| {
+                let text = match &self.shipyard_waypoint {
+                    Some(w) => w.symbol.clone(),
+                    None => "None".to_owned(),
+                };
+
+                egui::ComboBox::from_label("Shipyard waypoint")
+                    .selected_text(format!("{:?}", text))
+                    .width(170.0)
+                    .show_ui(ui, |ui| {
+                        for waypoint in &self.waypoints {
+                            for symbol in &waypoint.traits {
+                                if symbol.symbol == waypoint_trait::Symbol::Shipyard {
+                                    ui.selectable_value(
+                                        &mut self.shipyard_waypoint,
+                                        Some(waypoint.clone()),
+                                        format!("{:?}", waypoint.symbol),
+                                    );
+                                }
+                            }
+                        }
+                    });
+                if let Some(w) = &self.shipyard_waypoint {
+                    if ui.button("Load ships").clicked() {
+                        match get_shipyard(&self.conf, &w.system_symbol, &w.symbol).block_on() {
+                            Ok(r) => self.shipyard_ships = r.data.ships,
+                            Err(_) => self.shipyard_ships = None,
+                        }
+                    }
+                }
+
+                if let Some(s) = &self.shipyard_ships {
+                    for ship in s {
+                        ui.label(format!("Ship: {:?}", ship.description));
+                        ui.label(format!("\tEngine"));
+                        ui.label(format!("\t\tName {:?}", ship.engine.name));
+                        ui.label(format!("\t\tCondition {:?}", ship.engine.condition));
+                        ui.label(format!("\t\tSpeed {:?}", ship.engine.speed));
+                        ui.label(format!("\tModules"));
+
+                        for m in &ship.modules {
+                            ui.label(format!("\t\tName {:?}", m.name));
+                            ui.label(format!("\t\tRange {:?}", m.range));
+
+                            if let Some(c) = m.capacity {
+                                ui.label(format!("\t\tCapacity {:?}", c));
+                            }
+                            if let Some(m) = m.range {
+                                ui.label(format!("\t\tRange {:?}", m));
+                            }
+
+                            ui.label(format!("\tRequirements {:?}", m.requirements));
+                        }
+                        ui.label(format!("\tPrice: {:?}", ship.purchase_price));
+
+                        if ui.button("Purchase").clicked() {
+                            let req = purchase_ship_request::PurchaseShipRequest {
+                                ship_type: ship.r#type.unwrap(),
+                                waypoint_symbol: self.shipyard_waypoint.clone().unwrap().symbol.clone(),
+                            };
+                            purchase_ship(&self.conf, Some(req)).block_on();
+                        }
+
+                        ui.separator();
                     }
                 }
             });
