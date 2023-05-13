@@ -11,6 +11,8 @@ spacedust = "1.0.5"
 egui = "0.21.0"
 tokio = { version = "1.28.1", features = ["full"] }
 pollster = "0.3.0"
+strum = "0.24.1"
+strum_macros = "0.24.3"
 
 eframe = { version = "0.21.0", default-features = false, features = [
     "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.

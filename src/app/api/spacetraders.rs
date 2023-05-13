@@ -12,6 +12,9 @@ use spacedust::apis::configuration::Configuration;
 use spacedust::apis::default_api::register;
 use spacedust::models::register_request::{Faction, RegisterRequest};
 
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct SpaceTraders {}
 
@@ -19,6 +22,13 @@ pub struct SpaceTraders {}
 pub struct ShipWithNav {
     pub ship: Ship,
     pub destination: String,
+}
+
+#[derive(Debug, EnumIter, Clone, Copy)]
+pub enum Message {
+    GetFleet,
+    GetWaypoints,
+    GetContracts,
 }
 
 pub trait RenderWithWaypoints {
