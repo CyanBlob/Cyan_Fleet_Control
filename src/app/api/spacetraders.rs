@@ -2,8 +2,10 @@ use egui::Ui;
 use pollster::FutureExt;
 use spacedust::apis::agents_api::*;
 use spacedust::apis::contracts_api::*;
+#[allow(unused)]
 use spacedust::apis::default_api::*;
 use spacedust::apis::fleet_api::*;
+#[allow(unused)]
 use spacedust::apis::systems_api::*;
 
 use spacedust::models::*;
@@ -12,10 +14,7 @@ use spacedust::apis::configuration::Configuration;
 use spacedust::apis::default_api::register;
 use spacedust::models::register_request::{Faction, RegisterRequest};
 
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
-
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct SpaceTraders {}
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -24,19 +23,19 @@ pub struct ShipWithNav {
     pub destination: String,
 }
 
-#[derive(Debug, EnumIter, Clone, Copy)]
-pub enum Message {
-    GetFleet,
-    GetWaypoints,
-    GetContracts,
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+pub struct ShipyardShipWithWaypoint {
+    pub ship: ShipyardShip,
+    pub waypoint: String,
 }
+
 
 pub trait RenderWithWaypoints {
     fn render_with_waypoints(
         &mut self,
         ui: &mut Ui,
-        conf: &Configuration,
-        waypoints: &Vec<Waypoint>,
+        _conf: &Configuration,
+        _waypoints: &Vec<Waypoint>,
     ) where
         Self: std::fmt::Debug,
     {
@@ -45,7 +44,7 @@ pub trait RenderWithWaypoints {
 }
 
 pub trait Render {
-    fn render(&mut self, ui: &mut Ui, conf: &Configuration)
+    fn render(&mut self, ui: &mut Ui, _conf: &Configuration)
     where
         Self: std::fmt::Debug,
     {
@@ -273,43 +272,5 @@ impl Render for Contract {
                 }
             }
         }
-    }
-}
-
-impl SpaceTraders {
-    pub async fn create_account(&self, username: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Create Configuration
-        let mut conf = Configuration::new();
-
-        // Create Register Request
-        let reg_req = RegisterRequest::new(Faction::Quantum, "CyanBlob".to_string());
-
-        // Register Agent
-        let register_response = register(&conf, Some(reg_req)).await;
-
-        match register_response {
-            Ok(res) => {
-                println!("{:#?}", res);
-                // Update Config with Agent Token
-                conf.bearer_access_token = Some(res.data.token);
-            }
-            Err(err_res) => {
-                panic!("{:#?}", err_res);
-            }
-        }
-
-        // Get Agent Details to Confirm Working
-        match get_my_agent(&conf).await {
-            Ok(res) => {
-                println!("{:#?}", res);
-                // Print Symbol
-                println!("My Symbol: {:#?}", res.data.symbol);
-            }
-            Err(err_res) => {
-                panic!("{:#?}", err_res);
-            }
-        }
-
-        Ok(())
     }
 }
